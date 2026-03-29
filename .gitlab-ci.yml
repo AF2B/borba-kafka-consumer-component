@@ -72,8 +72,8 @@ coverage:
   script:
     - clojure -M:test -m kaocha.runner
         --plugin kaocha.plugin/cloverage
-        --cloverage-output target/coverage
-        --cloverage-fail-threshold 85
+        --cov-output target/coverage
+        --cov-fail-threshold 85
   # Extracts the coverage % from cloverage output for GitLab's coverage badge
   coverage: '/(\d+\.?\d+)% covered/'
   artifacts:
