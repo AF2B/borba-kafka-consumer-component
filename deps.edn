@@ -8,4 +8,31 @@
   org.slf4j/slf4j-simple            {:mvn/version "2.0.13"}}
 
  :mvn/repos
- {"confluent" {:url "https://packages.confluent.io/maven/"}}}
+ {"confluent" {:url "https://packages.confluent.io/maven/"}}
+
+ :aliases
+ {;; ── Testing ───────────────────────────────────────────────────────────────
+  :test
+  {:extra-paths ["test"]
+   :extra-deps  {lambdaisland/kaocha          {:mvn/version "1.91.1392"}
+                 lambdaisland/kaocha-cloverage {:mvn/version "1.1.89"}
+                 cloverage/cloverage          {:mvn/version "1.2.4"}}}
+
+  ;; ── Formatting ────────────────────────────────────────────────────────────
+  :fmt-check
+  {:extra-deps {cljfmt/cljfmt {:mvn/version "0.9.2"}}
+   :main-opts  ["-m" "cljfmt.main" "check" "src" "test"]}
+
+  :fmt-fix
+  {:extra-deps {cljfmt/cljfmt {:mvn/version "0.9.2"}}
+   :main-opts  ["-m" "cljfmt.main" "fix" "src" "test"]}
+
+  ;; ── Linting ───────────────────────────────────────────────────────────────
+  :lint
+  {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2024.09.27"}}
+   :main-opts  ["-m" "clj-kondo.main" "--lint" "src"]}
+
+  ;; ── Build ─────────────────────────────────────────────────────────────────
+  :build
+  {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.5"}}
+   :ns-default build}}}
