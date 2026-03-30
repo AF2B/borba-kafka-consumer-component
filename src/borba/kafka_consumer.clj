@@ -82,23 +82,33 @@
 ;; ── Handler registry ────────────────────────────────────────────────────────
 ;;
 ;; The handlers map is declared entirely in EDN (system/stag.edn, etc.)
-;; using #ig/ref to reference Integrant keys that return handler functions.
+;; using fully-qualified symbols that point directly to handler functions.
+;; No Integrant boilerplate needed in the service's events namespace.
 ;;
 ;; Example in stag.edn:
 ;;   :kafka/consumer-handlers
-;;   {"order-events" #ig/ref :handlers.kafka/order-event}
+;;   {"order-events" com.my-service.events.consumer/handle-order-event}
 ;;
-;;   :handlers.kafka/order-event {}
+;; The handler namespace is loaded automatically via requiring-resolve,
+;; so it does NOT need to be in :service/namespaces.
 ;;
-;; Each handler Integrant key is registered via defmethod ig/init-key in the
-;; service's events namespace:
-;;   (defmethod ig/init-key :handlers.kafka/order-event [_ _] handle-order-event)
-;;
-;; Integrant resolves all #ig/ref values before calling this init-key,
-;; so `handlers` is already the fully-resolved {"topic-name" fn} map.
+;; Handler functions still receive the standard message map:
+;;   {:keys [key value topic partition offset]}
+
+(defn- resolve-handler
+  "Resolves a handler value: returns the function if already a fn,
+   or loads the namespace and resolves the var if a qualified symbol."
+  [handler]
+  (if (symbol? handler)
+    (requiring-resolve handler)
+    handler))
 
 (defmethod ig/init-key :kafka/consumer-handlers
   [_ handlers]
-  (or handlers {}))
+  (reduce-kv
+   (fn [acc topic handler]
+     (assoc acc topic (resolve-handler handler)))
+   {}
+   (or handlers {})))
 
 (defmethod ig/halt-key! :kafka/consumer-handlers [_ _] nil)
