@@ -79,10 +79,26 @@
       (.close ^KafkaConsumer consumer)
       (println "📥 [kafka-consumer] Stopped"))))
 
-;; ── Handler registry (base — override in your service) ──────────────────────
+;; ── Handler registry ────────────────────────────────────────────────────────
+;;
+;; The handlers map is declared entirely in EDN (system/stag.edn, etc.)
+;; using #ig/ref to reference Integrant keys that return handler functions.
+;;
+;; Example in stag.edn:
+;;   :kafka/consumer-handlers
+;;   {"order-events" #ig/ref :handlers.kafka/order-event}
+;;
+;;   :handlers.kafka/order-event {}
+;;
+;; Each handler Integrant key is registered via defmethod ig/init-key in the
+;; service's events namespace:
+;;   (defmethod ig/init-key :handlers.kafka/order-event [_ _] handle-order-event)
+;;
+;; Integrant resolves all #ig/ref values before calling this init-key,
+;; so `handlers` is already the fully-resolved {"topic-name" fn} map.
 
 (defmethod ig/init-key :kafka/consumer-handlers
-  [_ _]
-  ;; Override this defmethod in your service's events namespace.
-  ;; Returns a map of "topic-name" → handler-fn
-  {})
+  [_ handlers]
+  (or handlers {}))
+
+(defmethod ig/halt-key! :kafka/consumer-handlers [_ _] nil)
