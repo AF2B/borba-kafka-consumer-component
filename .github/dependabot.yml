@@ -1,0 +1,16 @@
+# Keeps the pipelines current: the pinned actions and the shared borba-tooling
+# workflows. Each update arrives as a pull request that CI then verifies.
+# Clojure dependencies are reported by the weekly Scheduled run, because
+# Dependabot does not read deps.edn.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
