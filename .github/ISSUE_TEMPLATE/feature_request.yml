@@ -1,0 +1,18 @@
+name: Feature request
+description: Propose a change to what the library does
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do and why the library does not let you.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: How it could work, and what you considered and rejected.
+    validations:
+      required: true

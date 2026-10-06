@@ -1,6 +1,24 @@
+# Build output and tool caches
 .cpcache/
+.nrepl-port
+.lsp/.cache/
+.clj-kondo/.cache/
+.calva/
+.portal/
+classes/
+target/
+*.class
+*.jar
+
+# Editors
 .idea/
 *.iml
-target/
-.clj-kondo
-.lsp
+.vscode/
+
+# Local configuration: values never belong in the repository
+.env
+.env.*
+!.env.example
+
+# Operating system
+.DS_Store

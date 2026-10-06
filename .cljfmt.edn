@@ -1,0 +1,9 @@
+;; The formatting every Borba repository follows. `make fmt-check` enforces it
+;; and `make fmt` applies it.
+{:remove-consecutive-blank-lines? true
+ :insert-missing-whitespace? true
+ ;; Values of a map that are aligned in columns stay aligned.
+ :remove-multiple-non-indenting-spaces? false
+ :sort-ns-references? true
+ ;; The body of a property test is indented like the body of a let.
+ :extra-indents {for-all [[:block 1]]}}

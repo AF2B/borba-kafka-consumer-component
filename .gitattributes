@@ -1,0 +1,5 @@
+* text=auto eol=lf
+
+*.clj  linguist-language=Clojure
+*.cljc linguist-language=Clojure
+*.edn  linguist-language=Clojure
