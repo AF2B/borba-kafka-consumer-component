@@ -1,0 +1,16 @@
+;; Unit tests run everywhere. Integration tests carry ^:integration metadata and
+;; run against the real services their namespace documents, locally and in CI.
+#kaocha/v1
+ {:tests    [{:id         :unit
+              :test-paths ["test"]
+              :skip-meta  [:integration]}
+             {:id         :integration
+              :test-paths ["test"]
+              :focus-meta [:integration]}]
+
+  :plugins  [:kaocha.plugin/randomize
+             :kaocha.plugin/filter
+             :kaocha.plugin/capture-output
+             :kaocha.plugin/profiling]
+
+  :reporter [kaocha.report/documentation]}
