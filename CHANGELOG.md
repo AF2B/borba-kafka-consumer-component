@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-06
+
 ### Added
 
 - At-least-once delivery. The consumer commits the offset of a message when its handler is done with it, where it committed on a
@@ -50,5 +52,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 First release: the `:components/kafka-consumer` and `:kafka/consumer-handlers` Integrant components, which poll topics in a thread and
 give each message to a handler.
 
-[Unreleased]: https://github.com/AF2B/borba-kafka-consumer-component/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/AF2B/borba-kafka-consumer-component/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/AF2B/borba-kafka-consumer-component/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/AF2B/borba-kafka-consumer-component/releases/tag/v1.0.0
