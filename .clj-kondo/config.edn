@@ -1,5 +1,12 @@
 ;; The lint every Borba repository follows. `make lint` fails on any warning.
-{:linters
+;;
+;; A library that has macros ships the configuration that teaches clj-kondo
+;; about them in resources/clj-kondo.exports/io.github.af2b/<the repository>/.
+;; The lint of the library reads it from here, and the projects that depend on
+;; it import it. Where there is none, the path is ignored.
+{:config-paths ["../resources/clj-kondo.exports/io.github.af2b/borba-kafka-consumer-component"]
+
+ :linters
  {:missing-docstring            {:level :warning}
   :refer-all                    {:level :error}
   :use                          {:level :error}

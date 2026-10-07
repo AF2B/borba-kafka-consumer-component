@@ -13,7 +13,7 @@ permissions:
 jobs:
   verify:
     name: Verify
-    uses: AF2B/borba-tooling/.github/workflows/clojure-lib.yml@c63c308b69051b9e1cabc24e87153aaa4e5cd26a # v0.1.4
+    uses: AF2B/borba-tooling/.github/workflows/clojure-lib.yml@c91f13d33e8d6d2deca8c3d0dee2e08458984711 # v0.1.5
     with:
       postgres: false
       redis: false
@@ -22,7 +22,7 @@ jobs:
   release:
     name: Release
     needs: verify
-    uses: AF2B/borba-tooling/.github/workflows/clojure-lib-release.yml@c63c308b69051b9e1cabc24e87153aaa4e5cd26a # v0.1.4
+    uses: AF2B/borba-tooling/.github/workflows/clojure-lib-release.yml@c91f13d33e8d6d2deca8c3d0dee2e08458984711 # v0.1.5
     permissions:
       contents: write
       id-token: write
