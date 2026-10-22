@@ -28,10 +28,16 @@
    `:on-error` itself throws the message is not past: the consumer goes back to
    it, so a dead-letter topic that is away does not make the messages vanish.
 
+   With :schema-registry each value is read with the schema it names and
+   validated against it, see borba.kafka-consumer.schema-registry. A value
+   that cannot be read is a failure as a value that is not JSON is, except
+   when the registry does not answer: then the message is read again.
+
    A stop finishes the message in hand and commits what is done."
   (:require
    [borba.kafka-consumer.config :as config]
    [borba.kafka-consumer.message :as message]
+   [borba.kafka-consumer.schema-registry :as schema-registry]
    [clojure.tools.logging :as log]
    [integrant.core :as ig])
   (:import
@@ -123,12 +129,18 @@
    settings]
   (let [raw     (message/raw-message record)
         handler (get handlers (:topic raw))
-        parsed  (message/parse raw)]
+        parsed  (message/parse raw (:value-deserializer settings))]
     (cond
       (nil? handler)
       (do (log/errorf "kafka message of a topic without a handler: %s-%d at %d"
                       (:topic raw) (:partition raw) (:offset raw))
           :done)
+
+      (= :schema-registry-unavailable (:error parsed))
+      (do (log/warnf "schema registry does not answer for %s-%d at %d: %s"
+                     (:topic raw) (:partition raw) (:offset raw)
+                     "it is read again")
+          :again)
 
       (message/failure? parsed)
       (if (report! parsed settings) :done :again)
@@ -244,7 +256,7 @@
                        :topics  (vec missing)})))))
 
 (defmethod ig/init-key :components/kafka-consumer
-  [_ {:keys [handlers verify-connection? verify-timeout-ms]
+  [_ {:keys [handlers verify-connection? verify-timeout-ms schema-registry]
       :or   {verify-connection? true
              verify-timeout-ms  default-verify-timeout-ms}
       :as   options}]
@@ -264,10 +276,14 @@
                                       brokers)
                                  {:error   ::cannot-connect
                                   :brokers brokers}
-                                 cause)))))
+                                 cause))))
+          (some-> schema-registry schema-registry/verify!))
         (let [consumer  (KafkaConsumer. ^java.util.Map properties)
               running   (atom true)
-              loop-opts (assoc settings :running? #(deref running))
+              reader    (some-> schema-registry schema-registry/deserializer)
+              loop-opts (assoc settings
+                               :running?           #(deref running)
+                               :value-deserializer reader)
               thread    (doto (Thread.
                                ^Runnable
                                #(poll-loop! consumer handlers loop-opts)
@@ -281,20 +297,22 @@
            :thread              thread
            :running             running
            :client-id           client-id
-           :shutdown-timeout-ms (:shutdown-timeout-ms settings)})))))
+           :shutdown-timeout-ms (:shutdown-timeout-ms settings)
+           :value-deserializer  reader})))))
 
 (defmethod ig/halt-key! :components/kafka-consumer
   [_ state]
   (when state
     (let [{:keys [^Consumer consumer ^Thread thread running client-id
-                  shutdown-timeout-ms]} state]
+                  shutdown-timeout-ms value-deserializer]} state]
       (reset! running false)
       (.wakeup consumer)
       (.join thread (long shutdown-timeout-ms))
       (if (.isAlive thread)
         (log/errorf "kafka consumer %s did not stop within %d ms"
                     client-id shutdown-timeout-ms)
-        (log/infof "kafka consumer %s stopped" client-id)))))
+        (log/infof "kafka consumer %s stopped" client-id))
+      (schema-registry/close! value-deserializer))))
 
 (defn running?
   "Returns true while the consumer is polling, for a readiness check.

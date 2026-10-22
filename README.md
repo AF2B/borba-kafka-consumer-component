@@ -11,11 +11,17 @@ is reported and not silently lost, and a stop finishes the message in hand.
 ```clojure
 io.github.af2b/borba-kafka-consumer-component
 {:git/url "https://github.com/AF2B/borba-kafka-consumer-component"
- :git/tag "v2.0.0"
+ :git/tag "v2.1.0"
  :git/sha "<the commit of the tag, printed in the release notes>"}
 ```
 
-It depends on Clojure, Integrant, `tools.logging`, [jsonista](https://github.com/metosin/jsonista) and the Apache Kafka client 4.3.1.
+It depends on Clojure, Integrant, `tools.logging`, [jsonista](https://github.com/metosin/jsonista), the Apache Kafka client 4.3.1 and
+the JSON Schema deserializer of Confluent 8.3.2, which comes from the Maven repository of Confluent, so a project that depends on the
+component adds it:
+
+```clojure
+:mvn/repos {"confluent" {:url "https://packages.confluent.io/maven/"}}
+```
 
 ## Use
 
@@ -71,6 +77,35 @@ functions or as qualified symbols, whose namespace it loads, so a handler needs 
 | `:on-error` | A function of the failure of a message that could not be handled | none |
 | `:verify-connection?`, `:verify-timeout-ms` | Whether the start asks the brokers who is in the cluster, and for how long | `true`, `5000` |
 | `:properties` | More properties of the client, strings to strings: SASL, TLS | none |
+
+## The Schema Registry
+
+A topic that `borba-kafka-producer-component` writes with its `:schema-registry` holds values in the wire format of Confluent: a magic
+byte, the id of a JSON Schema, then the JSON. The consumer reads them with the same registry:
+
+```clojure
+:components/kafka-consumer
+{:bootstrap-servers #env KAFKA_BROKERS
+ :group-id          "orders-service"
+ :topics            ["order-events"]
+ :handlers          #ig/ref :kafka/consumer-handlers
+ :schema-registry   {:url #env SCHEMA_REGISTRY_URL}}
+```
+
+| Option | What it is | Default |
+|---|---|---|
+| `:url` | The URL of the registry | required |
+| `:basic-auth` | The credentials, `"user:password"` | none |
+| `:timeout-ms` | How long a request to the registry waits to connect and to be answered | `5000` |
+
+The consumer needs no schema of its own: each value names the one it was written with, the registry gives it, and the value is
+validated against it before the handler sees it, as the same data it would be without the registry. The start fails when the registry
+does not answer (`::schema-registry/cannot-connect`), as it does for the brokers.
+
+Each value is read on its own, so a value that cannot be read is the failure of its message, reported to `:on-error` as a value that
+is not JSON is: `:schema-violation` when its schema refuses it, `:schema-not-registered` when the registry does not have the schema it
+names, and `:invalid-value` when it is not in the wire format at all, as JSON text is. A registry that does not answer,
+`:schema-registry-unavailable`, is not the fault of the message, so the message is read again after the backoff, and never past.
 
 ## What at-least-once means
 
@@ -150,6 +185,7 @@ the handler must be well inside it.
 | `running?` | Whether the consumer is polling |
 | `borba.kafka-consumer.config` | The checked options, turned into the properties of the client |
 | `borba.kafka-consumer.message` | What a handler is given, and the failure of a message |
+| `borba.kafka-consumer.schema-registry` | The values read with the schema they name |
 
 ## Tests
 
@@ -165,7 +201,18 @@ KAFKA_BROKERS=127.0.0.1:9092 make test-integration
 It covers delivery in order with the key, the value and the headers, a tombstone, a handler that throws until the third attempt, a consumer of
 the same group that starts after another and is not given what was committed, the message in hand when the consumer is stopped, a value
 that is not JSON, a message that is never handled, an `:on-error` that throws until it does not, two topics, and the start of a
-consumer that cannot reach the brokers.
+consumer that cannot reach the brokers, and values in the wire format of Confluent with one that its schema refuses. That last test
+uses the mock registry of Confluent unless `SCHEMA_REGISTRY_URL` names a real one:
+
+```bash
+docker run --rm -d --name borba-registry-it --network host \
+  -e SCHEMA_REGISTRY_HOST_NAME=localhost \
+  -e SCHEMA_REGISTRY_LISTENERS=http://127.0.0.1:8081 \
+  -e SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS=PLAINTEXT://127.0.0.1:9092 \
+  confluentinc/cp-schema-registry:8.0.0
+
+KAFKA_BROKERS=127.0.0.1:9092 SCHEMA_REGISTRY_URL=http://127.0.0.1:8081 make test-integration
+```
 
 ## Design notes
 

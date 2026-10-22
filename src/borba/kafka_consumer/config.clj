@@ -6,6 +6,7 @@
    offsets by itself, so a message is only past when the handler is done with
    it, and it reads only what a transaction has committed."
   (:require
+   [borba.kafka-consumer.schema-registry :as schema-registry]
    [clojure.string :as str])
   (:import
    (org.apache.kafka.clients.consumer ConsumerConfig)
@@ -102,11 +103,15 @@
      45000)
    - max-poll-interval-ms: how long the handlers of a poll have to be done
      (default 300000)
+   - schema-registry: the Schema Registry the values are read with, see
+     borba.kafka-consumer.schema-registry (default none: the values are JSON
+     text)
    - properties: more properties of the client, a map of strings to strings,
      such as the security protocol and the SASL settings, which take the
      place of the ones above (default none)"
   [{:keys [bootstrap-servers group-id client-id auto-offset-reset
-           max-poll-records session-timeout-ms max-poll-interval-ms properties]
+           max-poll-records session-timeout-ms max-poll-interval-ms
+           schema-registry properties]
     :or   {client-id            default-client-id
            auto-offset-reset    default-auto-offset-reset
            max-poll-records     default-max-poll-records
@@ -134,6 +139,8 @@
                        (every? string? (vals properties))))
       (throw (invalid-option :properties properties
                              "a map of strings to strings")))
+    (when schema-registry
+      (schema-registry/check-options schema-registry))
     (merge {ConsumerConfig/BOOTSTRAP_SERVERS_CONFIG        brokers
             ConsumerConfig/GROUP_ID_CONFIG                 group-id
             ConsumerConfig/CLIENT_ID_CONFIG                client-id
@@ -150,6 +157,8 @@
             (int session-timeout-ms)
             ConsumerConfig/MAX_POLL_INTERVAL_MS_CONFIG
             (int max-poll-interval-ms)}
+           (when schema-registry
+             schema-registry/client-properties)
            properties)))
 
 (defn loop-settings
