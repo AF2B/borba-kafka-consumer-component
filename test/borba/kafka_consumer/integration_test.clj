@@ -5,12 +5,22 @@
      docker run --rm -d --name borba-kafka-it -p 127.0.0.1:9092:9092 \\
        apache/kafka:4.0.0
 
-   and points the tests at with KAFKA_BROKERS (127.0.0.1:9092)."
+   and points the tests at with KAFKA_BROKERS (127.0.0.1:9092).
+
+   The Schema Registry test uses SCHEMA_REGISTRY_URL when it is set, a real
+   registry on that Kafka, and the mock registry of Confluent otherwise, so
+   the wire format is written to and read from a real Kafka either way."
   (:require
    [borba.kafka-consumer :as kafka]
    [clojure.test :refer [deftest is testing]]
-   [integrant.core :as ig])
+   [integrant.core :as ig]
+   [jsonista.core :as jsonista])
   (:import
+   (com.fasterxml.jackson.databind JsonNode ObjectMapper)
+   (io.confluent.kafka.schemaregistry.client SchemaRegistryClientFactory)
+   (io.confluent.kafka.schemaregistry.json
+    JsonSchema JsonSchemaProvider JsonSchemaUtils)
+   (io.confluent.kafka.serializers.json KafkaJsonSchemaSerializer)
    (java.nio.charset StandardCharsets)
    (org.apache.kafka.clients.producer
     KafkaProducer ProducerConfig ProducerRecord)
@@ -278,3 +288,81 @@
               :brokers "127.0.0.1:1"}
              (ex-data (ex-cause thrown))))
       (is (< (/ (- (System/nanoTime) started) 1e6) 5000)))))
+
+;; Schema Registry
+
+(def ^:private ^JsonSchema order-schema
+  (JsonSchema.
+   ^String (jsonista/write-value-as-string
+            {:type                 "object"
+             :properties           {:total {:type "number"}}
+             :required             ["total"]
+             :additionalProperties false})))
+
+(defn- registry-url
+  []
+  (or (System/getenv "SCHEMA_REGISTRY_URL")
+      (str "mock://borba-it-" (random-uuid))))
+
+(defn- register!
+  [url topic]
+  (let [^java.util.List urls      [url]
+        ^java.util.List providers [(JsonSchemaProvider.)]
+        ^java.util.Map  configs   {}
+        ^java.util.Map  headers   {}
+        client (SchemaRegistryClientFactory/newClient urls
+                                                      (int 10)
+                                                      providers
+                                                      configs
+                                                      headers)]
+    (.register client (str topic "-value") order-schema)
+    (.close client)))
+
+(defn- produce-with-schema!
+  "Writes values to a topic in the wire format of Confluent, as a producer
+   with the registry does. With validate? false it also writes what the schema
+   refuses, as a producer that does not check would."
+  [url
+   topic
+   values
+   validate?]
+  (let [properties {ProducerConfig/BOOTSTRAP_SERVERS_CONFIG (brokers)
+                    ProducerConfig/KEY_SERIALIZER_CLASS_CONFIG
+                    (.getName StringSerializer)
+                    ProducerConfig/VALUE_SERIALIZER_CLASS_CONFIG
+                    (.getName KafkaJsonSchemaSerializer)
+                    "schema.registry.url"      url
+                    "auto.register.schemas"    false
+                    "json.fail.invalid.schema" validate?}]
+    (with-open [producer (KafkaProducer. ^java.util.Map properties)]
+      (doseq [value values]
+        (let [node   (.valueToTree ^ObjectMapper jsonista/default-object-mapper
+                                   value)
+              record (ProducerRecord. ^String topic
+                                      "order"
+                                      (JsonSchemaUtils/envelope order-schema
+                                                                ^JsonNode
+                                                                node))]
+          @(.send producer record))))))
+
+(deftest schema-registry-test
+  (testing "reads each value with the schema it names, and reports the one
+            its schema refuses"
+    (let [url      (registry-url)
+          topic    (unique "schema")
+          seen     (atom [])
+          failures (atom [])]
+      (register! url topic)
+      (produce-with-schema! url topic [{:total 1}] true)
+      (produce-with-schema! url topic [{:total "two"}] false)
+      (produce-with-schema! url topic [{:total 3}] true)
+      (let [system (start [topic] (unique "group")
+                          {topic #(swap! seen conj (:value %))}
+                          {:schema-registry {:url url}
+                           :on-error        #(swap! failures conj %)})]
+        (try
+          (is (eventually #(= 2 (count @seen))))
+          (is (= [{:total 1} {:total 3}] @seen))
+          (is (= [:schema-violation] (mapv :error @failures)))
+          (finally
+            (stop system)))))))

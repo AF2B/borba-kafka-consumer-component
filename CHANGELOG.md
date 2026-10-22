@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `:schema-registry`, which reads values written in the wire format of Confluent with the JSON Schema they name, validated before
+  the handler sees them. A value that cannot be read is the failure of its message (`:schema-violation`, `:schema-not-registered`
+  or `:invalid-value`), reported as a value that is not JSON is; a registry that does not answer makes the message be read again
+  instead. The start fails when the registry does not answer. Without the option nothing changes: the values are JSON text.
+- The JSON Schema deserializer of Confluent 8.3.2, from the Maven repository of Confluent.
+
 ## [2.0.0] - 2026-10-06
 
 ### Added

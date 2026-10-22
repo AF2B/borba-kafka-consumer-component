@@ -9,11 +9,17 @@
    what two readers would read differently is what an attack is made of. A null
    value, a tombstone, is nil.
 
+   With a Schema Registry the value is read with the schema it names instead,
+   see borba.kafka-consumer.schema-registry.
+
    A message that cannot be handled has a failure, a map with an :error:
    :invalid-json when the value cannot be read, which is not tried again
-   because it will not read any better, and :handler-failed when the handler
-   threw in every attempt."
+   because it will not read any better (with a registry :invalid-value,
+   :schema-violation or :schema-not-registered, and
+   :schema-registry-unavailable, which is read again), and :handler-failed
+   when the handler threw in every attempt."
   (:require
+   [borba.kafka-consumer.schema-registry :as schema-registry]
    [jsonista.core :as jsonista])
   (:import
    (com.fasterxml.jackson.core JsonParser$Feature JsonProcessingException)
@@ -39,7 +45,8 @@
         (.headers record)))
 
 (defn raw-message
-  "Returns a record as a message whose :value is still the text of the record.
+  "Returns a record as a message whose :value is still what the client gave:
+   the text of the record, or its bytes when it is read with a registry.
    - record: a ConsumerRecord"
   [^ConsumerRecord record]
   {:key       (.key record)
@@ -70,18 +77,40 @@
            :attempts  attempts}
     cause (assoc :cause cause)))
 
-(defn parse
-  "Returns the message with its value read as JSON, or a failure when the value
-   is not valid JSON.
-   - message: a message from `raw-message`"
+(defn- parse-text
   [message]
-  (let [text (:value message)]
-    (if (nil? text)
-      message
-      (try
-        (assoc message :value (jsonista/read-value ^String text strict-mapper))
-        (catch JsonProcessingException cause
-          (failure message :invalid-json 1 cause))))))
+  (try
+    (update message :value #(jsonista/read-value ^String % strict-mapper))
+    (catch JsonProcessingException cause
+      (failure message :invalid-json 1 cause))))
+
+(defn- parse-with-schema
+  [message
+   value-deserializer]
+  (try
+    (let [node (schema-registry/decode value-deserializer
+                                       (:topic message)
+                                       (:value message))]
+      (assoc message :value (jsonista/read-value (str node) strict-mapper)))
+    (catch clojure.lang.ExceptionInfo cause
+      (failure message (:error (ex-data cause)) 1 (ex-cause cause)))))
+
+(defn parse
+  "Returns the message with its value read, or a failure when the value cannot
+   be read: as JSON text, or with the schema it names when there is a
+   deserializer of the registry.
+   - message: a message from `raw-message`
+   - value-deserializer: the deserializer of
+     borba.kafka-consumer.schema-registry (default none: the value is JSON
+     text)"
+  ([message]
+   (parse message nil))
+  ([message
+    value-deserializer]
+   (cond
+     (nil? (:value message)) message
+     value-deserializer      (parse-with-schema message value-deserializer)
+     :else                   (parse-text message))))
 
 (defn failure?
   "Returns true when a map is the failure of a message.
